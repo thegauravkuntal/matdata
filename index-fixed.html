@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>मतदाता सूची</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Arial,"Noto Sans Devanagari",sans-serif}
+.field{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;outline:none;background:#fff}
+.field:focus{border-color:#2563eb;box-shadow:0 0 0 2px #bfdbfe}
+th,td{padding:11px;border-bottom:1px solid #e2e8f0;text-align:left}
+th{background:#f1f5f9;position:sticky;top:0;z-index:10;white-space:nowrap}
+td{white-space:nowrap}
+tr:hover td{background:#f8fafc}
+.hidden{display:none}
+</style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+
+<header class="bg-blue-950 text-white p-5">
+<div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
+<div>
+<h1 class="text-2xl font-bold">मतदाता सूची</h1>
+<p class="text-blue-200 text-sm">Voter List — शाहपुरा, राजाखेड़ा (वार्ड 4)</p>
+</div>
+<div class="flex gap-2">
+<span id="totalBadge" class="bg-white/10 px-3 py-1 rounded-lg text-sm">कुल: 0</span>
+<span id="shownBadge" class="bg-white/10 px-3 py-1 rounded-lg text-sm">दिखा: 0</span>
+<button onclick="resetData()" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded-lg text-sm font-semibold" title="पुराना डेटा हटाकर नई JSON फ़ाइल अपलोड करें">नया डेटा अपलोड</button>
+</div>
+</div>
+</header>
+
+<main class="max-w-7xl mx-auto p-4 space-y-5">
+
+<!-- Loader -->
+<div id="loader" class="bg-white p-8 rounded-xl text-center">
+<p class="text-lg">⏳ डेटा लोड हो रहा है...</p>
+<p id="loaderMsg" class="text-sm text-gray-500 mt-2"></p>
+</div>
+
+<!-- Manual upload (agar fetch fail ho) -->
+<div id="manualBox" class="hidden bg-yellow-50 border-2 border-yellow-300 rounded-xl p-5">
+<h2 class="text-lg font-bold mb-2">📂 data.json अपलोड करें</h2>
+<p class="text-sm text-gray-600 mb-3">
+साइट को browser me directly (<code>file://</code>) kholne par JSON fetch nahi ho payi.
+Niche se <b>data.json</b> select karo — ek baar upload karne ke baad data browser me save ho jayega.
+</p>
+<input type="file" id="manualJson" accept=".json,application/json"
+  class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white cursor-pointer border rounded-lg p-2"/>
+<p id="manualMsg" class="mt-2 text-sm"></p>
+</div>
+
+<!-- Error -->
+<div id="errorBox" class="hidden bg-red-50 border-2 border-red-300 rounded-xl p-5">
+<p id="errorMsg" class="text-red-700"></p>
+</div>
+
+<!-- Main content -->
+<div id="mainBox" class="hidden space-y-5">
+
+<section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div class="bg-white p-4 rounded-xl"><p class="text-gray-500 text-sm">कुल मतदाता</p><b id="statTotal" class="text-2xl">0</b></div>
+<div class="bg-white p-4 rounded-xl"><p class="text-gray-500 text-sm">पुरुष</p><b id="statMale" class="text-2xl text-blue-600">0</b></div>
+<div class="bg-white p-4 rounded-xl"><p class="text-gray-500 text-sm">महिला</p><b id="statFemale" class="text-2xl text-pink-600">0</b></div>
+<div class="bg-white p-4 rounded-xl"><p class="text-gray-500 text-sm">अन्य / अज्ञात</p><b id="statOther" class="text-2xl">0</b></div>
+</section>
+
+<section class="bg-white p-5 rounded-xl shadow-sm">
+<h2 class="text-xl font-bold mb-3">🔎 मतदाता खोजें</h2>
+<div class="flex flex-col sm:flex-row gap-3">
+<input id="searchInput" class="field flex-1"
+  placeholder="नाम, क्रम संख्या, वोटर ID, पिता/पति, मकान, आयु, लिंग...">
+<select id="genderFilter" class="field sm:w-48">
+<option value="">सभी लिंग</option>
+<option value="पुरुष">पुरुष</option>
+<option value="महिला">महिला</option>
+<option value="अन्य">अन्य</option>
+</select>
+<button onclick="resetSearch()" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-lg font-semibold">Reset</button>
+</div>
+<p id="searchInfo" class="text-sm text-gray-500 mt-2"></p>
+</section>
+
+<section class="bg-white rounded-xl shadow-sm overflow-hidden">
+<div class="p-4 flex flex-wrap justify-between items-center gap-3 border-b">
+<h2 class="text-xl font-bold">मतदाता सूची</h2>
+<p id="pageInfo" class="text-sm text-gray-500"></p>
+</div>
+
+<div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+<table class="w-full text-sm">
+<thead>
+<tr>
+<th>क्रम संख्या</th>
+<th>वोटर ID</th>
+<th>नाम</th>
+<th>पिता / पति का नाम</th>
+<th>मकान संख्या</th>
+<th>आयु</th>
+<th>लिंग</th>
+<th>वार्ड</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+</div>
+
+<div class="p-4 flex flex-wrap justify-between items-center gap-3 border-t">
+<div class="flex gap-2">
+<button onclick="changePage(-1)" id="prevBtn" class="border px-4 py-2 rounded-lg hover:bg-gray-50">« पिछला</button>
+<button onclick="changePage(1)" id="nextBtn" class="border px-4 py-2 rounded-lg hover:bg-gray-50">अगला »</button>
+</div>
+<p id="pageNum" class="text-sm text-gray-600"></p>
+</div>
+</section>
+
+</div>
+
+</main>
+
+<footer class="text-center text-xs text-gray-500 p-4">
+राज्य निर्वाचन आयोग, राजस्थान — पंचायत चुनाव निर्वाचक नामावली, 2026
+</footer>
+
+<script>
+/* ============ CONFIG ============ */
+const JSON_URL = "data.json";           // same folder me rakho
+const CACHE_KEY = "voter_data_v1";      // localStorage me cache
+const PAGE_SIZE = 25;
+
+let allVoters = [];   // sab records flatten karke
+let filtered = [];
+let currentPage = 1;
+
+/* ============ LOAD DATA ============ */
+async function init(){
+  show("loader", true);
+  $("loaderMsg").textContent = "data.json fetch ho raha hai...";
+
+  // 1) pehle cache check karo
+  const cached = localStorage.getItem(CACHE_KEY);
+  if(cached){
+    try{
+      const arr = JSON.parse(cached);
+      if(Array.isArray(arr) && arr.length){
+        allVoters = arr;
+        $("loaderMsg").textContent = "cached data mila — " + arr.length + " records";
+        finishLoad();
+        return;
+      }
+    }catch(e){}
+  }
+
+  // 2) fetch try karo
+  try{
+    const res = await fetch(JSON_URL, {cache: "no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const raw = await res.json();
+    allVoters = flatten(raw);
+    if(!allVoters.length) throw new Error("JSON me koi record nahi mila");
+    localStorage.setItem(CACHE_KEY, JSON.stringify(allVoters));
+    finishLoad();
+  }catch(err){
+    console.warn("fetch fail:", err);
+    show("loader", false);
+    // manual upload dikhao
+    show("manualBox", true);
+    $("manualMsg").textContent = "फ़ाइल चुनें — data browser me save ho jayega, agli baar auto load hoga.";
+  }
+}
+
+/* ============ JSON PARSER ============ */
+/* Aapke JSON me "pages" array hai, har page me "text" field.
+   OCR-garbled text: नरम=नाम, ललग=लिंग, मकरन सपखजर=मकान संख्या,
+   नपतर कर नरम=पिता का नाम, आजच=आयु, पचरष=पुरुष, सल=महिला.
+   Voter ID (NLG..., RJ/0/077/..., BNZ...) sath me milta hai.
+*/
+function flatten(json){
+  // Direct array JSON, such as electors.json
+  if(Array.isArray(json)){
+    return json.map((p, index) => {
+      const genderRaw = cleanField(p.gender || "").toLowerCase();
+      let gender = "";
+      if(["male","पुरुष","पुरूष"].includes(genderRaw)) gender = "पुरुष";
+      else if(["female","महिला","स्त्री"].includes(genderRaw)) gender = "महिला";
+      else if(genderRaw && !["other","अन्य"].includes(genderRaw)) gender = cleanField(p.gender);
+      else if(["other","अन्य"].includes(genderRaw)) gender = "अन्य";
+
+      const relationRaw = cleanField(p.relation_type || p.relationType || "");
+      let relationType = relationRaw;
+      if(/^father$/i.test(relationRaw)) relationType = "पिता का नाम";
+      else if(/^husband$/i.test(relationRaw)) relationType = "पति का नाम";
+      else if(/^wife$/i.test(relationRaw)) relationType = "पति का नाम";
+      else if(/^mother$/i.test(relationRaw)) relationType = "माता का नाम";
+      else if(!relationType) relationType = "पिता का नाम";
+
+      return {
+        serial: cleanField(p.serial_no || p.serial || p.id || String(index + 1)),
+        voter: cleanField(p.epic_no || p.voter_id || p.voter || ""),
+        name: cleanField(p.elector_name || p.name || ""),
+        relation: cleanField(p.relation_name || p.relation || ""),
+        relationType,
+        house: cleanField(p.house_no || p.house_number || p.house || ""),
+        age: cleanField(p.age || ""),
+        gender,
+        ward: cleanField(p.ward_no || p.ward || "")
+      };
+    }).filter(v => v.serial || v.voter || v.name);
+  }
+
+  // Direct people-array JSON, such as all_people_details.json
+  if(json && Array.isArray(json.people)){
+    return json.people.map((p, index) => ({
+      serial: cleanField(p.serial || p.id || String(index + 1)),
+      voter: cleanField(p.voter_id || p.voter || p.epic || ""),
+      name: cleanField(p.name || ""),
+      relation: cleanField(p.relation_name || p.relation || ""),
+      relationType: cleanField(p.relation_type || "पिता का नाम"),
+      house: cleanField(p.house_number || p.house || ""),
+      age: cleanField(p.age || ""),
+      gender: cleanField(p.gender || ""),
+      ward: cleanField(p.ward || "")
+    })).filter(v => v.serial || v.voter || v.name);
+  }
+
+  if(json && Array.isArray(json.electors)){
+    return flatten(json.electors);
+  }
+
+  const pages = (json && json.pages) || [];
+  const out = [];
+  const seen = new Set();
+
+  for(const p of pages){
+    const pageText = p.text || "";
+    const pageNo = p.pdf_page || 0;
+    const pageNum = extractPageNumber(pageText); // X/49
+
+    // step 1: individual voters ko "नाम:" se split
+    const segments = splitByVoterBlocks(pageText);
+
+    for(const seg of segments){
+      const rec = parseRecord(seg, pageNo, pageNum);
+      if(!rec) continue;
+
+      // duplicate check
+      const key = (rec.voter || "") + "|" + rec.name + "|" + rec.serial;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push(rec);
+    }
+  }
+
+  // serial ke hisaab se sort
+  out.sort((a,b)=>{
+    const na = Number(a.serial), nb = Number(b.serial);
+    if(!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    return a.name.localeCompare(b.name, "hi");
+  });
+
+  return out;
+}
+
+function extractPageNumber(text){
+  const m = text.match(/पृष्ठ\s*संख्या\s*[:：]?\s*([\d०-९]+)\s*\/\s*([\d०-९]+)/);
+  return m ? hindiToNum(m[1]) + "/" + hindiToNum(m[2]) : "";
+}
+
+/* Ek page text me multiple voter blocks hain. Har "नरम:" (OCR-garbled "नाम:") se naya block shuru. */
+function splitByVoterBlocks(text){
+  // text me "नरम:" ya "नाम:" ke saare positions dhundo
+  const parts = [];
+  const re = /(?=(?:नाम|नरम)\s*[:：])/g;
+  const arr = text.split(re);
+  for(const a of arr){
+    const t = a.trim();
+    if(t && /(?:नाम|नरम)\s*[:：]/.test(t)) parts.push(t);
+  }
+  return parts;
+}
+
+/* Ek block se fields nikalo — OCR-garbled text handle karte hain:
+   नरम=नाम, ललग=लिंग, मकरन सपखजर=मकान संख्या, नपतर कर नरम=पिता का नाम,
+   आजच=आयु, पचरष=पुरुष, सल=महिला */
+function parseRecord(seg, pageNo, pageNum){
+  let name = "", relation = "", relationType = "पिता का नाम", house = "", age = "", gender = "";
+  let serial = "", voter = "", ward = "";
+
+  // ---------- Age (गड़बड़: आजच = आयु) ----------
+  const am = seg.match(/आजच\s*[:：]?\s*([\d०-९]{1,3})/);
+  if(am) age = hindiToNum(am[1]);
+
+  // ---------- Gender (गड़बड़: पचरष=पुरुष, सल=महिला) ----------
+  if(/(?:^|\s)(सल|महिला|स्त्री|female)\b/i.test(seg)) gender = "महिला";
+  else if(/(?:^|\s)(पचरष|पुरुष|पुरूष|male)\b/i.test(seg)) gender = "पुरुष";
+  else if(/तृतीय|अन्य/i.test(seg)) gender = "अन्य";
+
+  // ---------- Serial + Name + Relation + Voter ID ----------
+  // OCR format: \n<gender-val>\n<serial>\n<name>\n<relation>\n<voterID>
+  const nr = seg.match(/\n(?:सल|पचरष|महिला|पुरुष)\n(\d{1,4})\n([^\n]+)\n([^\n]+)\n(NLG[\s\/]?\d{5,10}|RJ\s*[\/]?\s*\d{1,3}\s*[\/]?\s*\d{1,4}\s*[\/]?\s*\d{4,8}|BNZ\s*\d{5,8}|RU\s*[\/]?\s*\d{1,3}\s*[\/]?\s*\d{1,4}\s*[\/]?\s*\d{4,8}|[A-Z]{2}\/\d{1,3}\/\d{1,4}\/\d{4,8}|[A-Z]{2,4}\d{6,10})/);
+  if(nr){
+    serial = nr[1];
+    name = cleanField(nr[2]);
+    relation = cleanField(nr[3]);
+    voter = nr[4].replace(/\s+/g, "").toUpperCase();
+  }
+
+  // ---------- Relation Type ----------
+  if(/पति/i.test(seg)) relationType = "पति का नाम";
+  else if(/पिता|पनत/i.test(seg)) relationType = "पिता का नाम";
+
+  // ---------- House (गड़बड़: मकरन सपखजर = मकान संख्या) ----------
+  const hm = seg.match(/मकरन\s*सपखजर\s*[:：]?\s*([^\n]+)/);
+  if(hm){
+    house = cleanField(hm[1])
+      .replace(/[^\d०-९A-Za-z\/\-]/g, "")
+      .trim();
+    house = hindiToNum(house);
+  }
+
+  // ---------- Ward (page header se) ----------
+  const wm = seg.match(/वार्ड\s*क्रमांक\s*[:：]?\s*(\d{1,3})/);
+  if(wm) ward = wm[1];
+  if(!ward){
+    // default from context — page 3+ sab ward 4
+    if(pageNo >= 3) ward = "4";
+  }
+
+  // Skip non-voter records
+  if(!name) return null;
+  if(name.length < 2) return null;
+  if(!/[\u0900-\u097F]/.test(name)) return null;
+  if(/^(तृतीय|अन्य|कुल|पुरुष|महिला)$/i.test(name)) return null;
+
+  return {
+    serial: serial,
+    voter: voter,
+    name: name,
+    relation: relation,
+    relationType: relationType,
+    house: house,
+    age: age,
+    gender: gender,
+    ward: ward,
+    page: pageNo,
+    pageNum: pageNum
+  };
+}
+
+/* Field clean */
+function cleanField(s){
+  return String(s || "")
+    .replace(/[\u200b-\u200d\ufeff]/g, "")
+    .replace(/[|¦]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/* Hindi digits → Arabic */
+function hindiToNum(s){
+  return String(s || "").replace(/[०-९]/g, d => String("०१२३४५६७८९".indexOf(d)));
+}
+
+/* ============ RENDER ============ */
+function finishLoad(){
+  show("loader", false);
+  show("mainBox", true);
+
+  // stats
+  $("statTotal").textContent = allVoters.length;
+  $("statMale").textContent = allVoters.filter(v => v.gender === "पुरुष").length;
+  $("statFemale").textContent = allVoters.filter(v => v.gender === "महिला").length;
+  $("statOther").textContent = allVoters.filter(v => !["पुरुष","महिला"].includes(v.gender)).length;
+
+  $("totalBadge").textContent = "कुल: " + allVoters.length;
+
+  currentPage = 1;
+  applyFilter();
+}
+
+function applyFilter(){
+  const q = ($("searchInput").value || "").trim().toLowerCase();
+  const gf = $("genderFilter").value;
+
+  filtered = allVoters.filter(v => {
+    if(gf && v.gender !== gf) return false;
+    if(!q) return true;
+    const hay = [
+      v.serial, v.voter, v.name, v.relation, v.house, v.age, v.gender, v.ward
+    ].map(x => String(x||"").toLowerCase()).join(" | ");
+    return hay.includes(q);
+  });
+
+  currentPage = 1;
+  renderTable();
+}
+
+function renderTable(){
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if(currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage-1) * PAGE_SIZE;
+  const rows = filtered.slice(start, start + PAGE_SIZE);
+
+  $("shownBadge").textContent = "दिखा: " + filtered.length;
+  $("searchInfo").textContent = "कुल " + allVoters.length + " में से " + filtered.length + " मिले";
+  $("pageInfo").textContent = filtered.length + " रिकॉर्ड";
+  $("pageNum").textContent = "पेज " + currentPage + " / " + totalPages;
+
+  $("prevBtn").disabled = currentPage <= 1;
+  $("nextBtn").disabled = currentPage >= totalPages;
+  $("prevBtn").style.opacity = currentPage <= 1 ? "0.4" : "1";
+  $("nextBtn").style.opacity = currentPage >= totalPages ? "0.4" : "1";
+
+  const tb = $("tableBody");
+
+  if(!rows.length){
+    tb.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-gray-500">कोई रिकॉर्ड नहीं मिला</td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = rows.map(r => `
+    <tr>
+      <td class="font-semibold">${esc(r.serial || "-")}</td>
+      <td class="font-mono text-xs">${esc(r.voter || "-")}</td>
+      <td class="font-bold text-gray-900">${esc(r.name || "-")}</td>
+      <td>${esc(r.relation || "-")}<br><span class="text-xs text-gray-500">(${esc(r.relationType || "पिता का नाम")})</span></td>
+      <td>${esc(r.house || "-")}</td>
+      <td>${esc(r.age || "-")}</td>
+      <td>${esc(r.gender || "-")}</td>
+      <td>${esc(r.ward || "-")}</td>
+    </tr>`).join("");
+}
+
+function changePage(d){
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  currentPage = Math.max(1, Math.min(totalPages, currentPage + d));
+  renderTable();
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+
+function resetSearch(){
+  $("searchInput").value = "";
+  $("genderFilter").value = "";
+  currentPage = 1;
+  applyFilter();
+}
+
+function resetData(){
+  localStorage.removeItem(CACHE_KEY);
+  allVoters = [];
+  filtered = [];
+  currentPage = 1;
+  $("searchInput").value = "";
+  $("genderFilter").value = "";
+  $("manualJson").value = "";
+  $("manualMsg").textContent = "पुरानी डेटा फ़ाइल हटाई गई। नई JSON फ़ाइल चुनें।";
+  $("totalBadge").textContent = "कुल: 0";
+  $("shownBadge").textContent = "दिखा: 0";
+  show("mainBox", false);
+  show("loader", false);
+  show("manualBox", true);
+  $("manualBox").scrollIntoView({behavior: "smooth", block: "center"});
+}
+
+/* ============ MANUAL UPLOAD FALLBACK ============ */
+$("manualJson").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  try{
+    const text = await f.text();
+    const raw = JSON.parse(text);
+    const arr = flatten(raw);
+    if(!arr.length) throw new Error("JSON me valid records nahi mile");
+    allVoters = arr;
+    localStorage.setItem(CACHE_KEY, JSON.stringify(arr));
+    $("manualMsg").textContent = "✅ " + arr.length + " रिकॉर्ड लोड हो गए!";
+    show("manualBox", false);
+    finishLoad();
+  }catch(err){
+    $("manualMsg").textContent = "❌ " + err.message;
+  }
+});
+
+/* ============ UTIL ============ */
+function $(id){ return document.getElementById(id); }
+function show(id, visible){
+  const el = $(id);
+  if(visible) el.classList.remove("hidden");
+  else el.classList.add("hidden");
+}
+function esc(v){
+  return String(v ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+/* ============ EVENTS ============ */
+$("searchInput").addEventListener("input", applyFilter);
+$("genderFilter").addEventListener("change", applyFilter);
+
+/* ============ START ============ */
+init();
+</script>
+
+</body>
+</html>
